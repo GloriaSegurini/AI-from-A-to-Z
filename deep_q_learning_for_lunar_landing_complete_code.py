@@ -306,31 +306,57 @@ class Agent():
         # The learn() method will be implemented later in the Agent class.
         self.learn(experiences, discount_factor)
 
-#   def act(self, state, epsilon = 0.):
-#     state = torch.from_numpy(state).float().unsqueeze(0).to(self.device)
-#     self.local_qnetwork.eval()
-#     with torch.no_grad():
-#       action_values = self.local_qnetwork(state)
-#     self.local_qnetwork.train()
-#     if random.random() > epsilon:
-#       return np.argmax(action_values.cpu().data.numpy())
-#     else:
-#       return random.choice(np.arange(self.action_size))
+  def act(self, state, epsilon = 0.):
+    # Convert the NumPy state into a float torch.Tensor, add the batch dimension
+    # at index 0 with unsqueeze(0), and move it to the selected device (CPU or GPU).
+    state = torch.from_numpy(state).float().unsqueeze(0).to(self.device)
+    # Switch the local Q-network to evaluation mode before making predictions.
+    self.local_qnetwork.eval()
+    # Disable gradient computation because here we are only doing inference.
+    with torch.no_grad():
+      # Forward-pass the state through the local Q-network to get the Q-values
+      # associated with each possible action.
+      action_values = self.local_qnetwork(state)
+    # Switch back to training mode after inference.
+    self.local_qnetwork.train()
+    # Epsilon-greedy policy:
+    # if the random number is greater than epsilon, exploit by choosing the
+    # action with the highest predicted Q-value.
+    if random.random() > epsilon:
+      return np.argmax(action_values.cpu().data.numpy())
+    else:
+      # Otherwise, explore by choosing a random action among all possible actions.
+      return random.choice(np.arange(self.action_size)) 
+ 
+  def learn(self, experiences, discount_factor):
+    # Unpack the sampled experiences into their different elements:
+    # current states, next states, actions taken, rewards received, and done flags.
+    states, next_states, actions, rewards, dones = experiences
+    # Get the maximum predicted Q-values for the next states from the target network.
+    # detach() removes this tensor from the computation graph, max(1)[0] keeps only
+    # the maximum values along the action dimension, and unsqueeze(1) restores
+    # the expected batch shape.
+    next_q_targets = self.target_qnetwork(next_states).detach().max(1)[0].unsqueeze(1)
+    # Compute the Q-targets for the current states using the Bellman target:
+    # reward + gamma * max_next_q * (1 - done).
+    q_targets = rewards + discount_factor * next_q_targets * (1 - dones)
+    # Get the expected Q-values from the local Q-network for the actions that
+    # were actually taken in the sampled experiences.
+    q_expected = self.local_qnetwork(states).gather(1, actions)
+    # Compute the mean squared error loss between expected Q-values and target Q-values.
+    loss = F.mse_loss(q_expected, q_targets)
+    # Reset the optimizer gradients before backpropagation.
+    self.optimizer.zero_grad()
+    # Backpropagate the loss to compute gradients with respect to the model parameters.
+    loss.backward()
+    # Perform one optimization step to update the local network parameters.
+    self.optimizer.step()
+    # Soft-update the target network parameters using the local network parameters.
+    self.soft_update(self.local_qnetwork, self.target_qnetwork, interpolation_parameter)
 
-#   def learn(self, experiences, discount_factor):
-#     states, next_states, actions, rewards, dones = experiences
-#     next_q_targets = self.target_qnetwork(next_states).detach().max(1)[0].unsqueeze(1)
-#     q_targets = rewards + discount_factor * next_q_targets * (1 - dones)
-#     q_expected = self.local_qnetwork(states).gather(1, actions)
-#     loss = F.mse_loss(q_expected, q_targets)
-#     self.optimizer.zero_grad()
-#     loss.backward()
-#     self.optimizer.step()
-#     self.soft_update(self.local_qnetwork, self.target_qnetwork, interpolation_parameter)
-
-#   def soft_update(self, local_model, target_model, interpolation_parameter):
-#     for target_param, local_param in zip(target_model.parameters(), local_model.parameters()):
-#       target_param.data.copy_(interpolation_parameter * local_param.data + (1.0 - interpolation_parameter) * target_param.data)
+  def soft_update(self, local_model, target_model, interpolation_parameter):
+    for target_param, local_param in zip(target_model.parameters(), local_model.parameters()):
+      target_param.data.copy_(interpolation_parameter * local_param.data + (1.0 - interpolation_parameter) * target_param.data)
 
 # # Initializing the DQN agent
 

@@ -122,10 +122,10 @@ import gymnasium as gym
 
 # We import Gymnasium, the library that provides reinforcement learning environments.
 # Here it will give us access to the LunarLander environment.
-env = gym.make('LunarLander-v2')
+env = gym.make('LunarLander-v3')
 
 # We create the environment by calling gym.make(...) with the exact environment name.
-# 'LunarLander-v2' is the environment in which our AI will be trained.
+# 'LunarLander-v3' is the environment in which our AI will be trained.
 
 # observation_space.shape tells us the shape of one state returned by the environment to the agent.
 # For LunarLander, the state is a vector of 8 values, so the shape is (8,).
@@ -405,7 +405,8 @@ for episode in range(1, number_episodes + 1):
   score = 0
   for t in range(maximum_number_timesteps_per_episode):
     action = agent.act(state, epsilon)
-    next_state, reward, done, _, _ = env.step(action)
+    next_state, reward, terminated, truncated, _ = env.step(action)
+    done = terminated or truncated
     agent.step(state, action, reward, next_state, done)
     state = next_state
     score += reward
@@ -423,12 +424,7 @@ for episode in range(1, number_episodes + 1):
 
 # Part 3 - Visualizing the results
 
-import glob
-import io
-import base64
 import imageio
-from IPython.display import HTML, display
-from gym.wrappers.monitoring.video_recorder import VideoRecorder
 
 def show_video_of_model(agent, env_name):
     env = gym.make(env_name, render_mode='rgb_array')
@@ -439,23 +435,12 @@ def show_video_of_model(agent, env_name):
         frame = env.render()
         frames.append(frame)
         action = agent.act(state)
-        state, reward, done, _, _ = env.step(action.item())
+        state, reward, terminated, truncated, _ = env.step(action.item())
+        done = terminated or truncated
     env.close()
-    imageio.mimsave('video.mp4', frames, fps=30)
+    video_path = os.path.abspath('video.mp4')
+    imageio.mimsave(video_path, frames, fps=30)
+    print(f'\nVideo saved to: {video_path}')
+    os.startfile(video_path)
 
-show_video_of_model(agent, 'LunarLander-v2')
-
-def show_video():
-    mp4list = glob.glob('*.mp4')
-    if len(mp4list) > 0:
-        mp4 = mp4list[0]
-        video = io.open(mp4, 'r+b').read()
-        encoded = base64.b64encode(video)
-        display(HTML(data='''<video alt="test" autoplay
-                loop controls style="height: 400px;">
-                <source src="data:video/mp4;base64,{0}" type="video/mp4" />
-             </video>'''.format(encoded.decode('ascii'))))
-    else:
-        print("Could not find video")
-
-show_video()
+show_video_of_model(agent, 'LunarLander-v3')

@@ -1,6 +1,5 @@
 numpy
 torch
 gymnasium[box2d]
-gym
 imageio
 ipython

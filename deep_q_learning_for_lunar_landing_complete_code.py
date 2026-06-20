@@ -360,74 +360,102 @@ class Agent():
 
 # # Initializing the DQN agent
 
-# agent = Agent(state_size, number_actions)
+agent = Agent(state_size, number_actions)
 
 # # Training the DQN agent
 
-# number_episodes = 2000
-# maximum_number_timesteps_per_episode = 1000
-# epsilon_starting_value  = 1.0
-# epsilon_ending_value  = 0.01
-# epsilon_decay_value  = 0.995
-# epsilon = epsilon_starting_value
-# scores_on_100_episodes = deque(maxlen = 100)
+# Maximum number of complete training episodes.
+# One episode is one full attempt of the lander:
+# the environment is reset, the agent acts step by step, and the episode ends
+# when the lander lands, crashes, or reaches the time-step limit.
+number_episodes = 2000
 
-# for episode in range(1, number_episodes + 1):
-#   state, _ = env.reset()
-#   score = 0
-#   for t in range(maximum_number_timesteps_per_episode):
-#     action = agent.act(state, epsilon)
-#     next_state, reward, done, _, _ = env.step(action)
-#     agent.step(state, action, reward, next_state, done)
-#     state = next_state
-#     score += reward
-#     if done:
-#       break
-#   scores_on_100_episodes.append(score)
-#   epsilon = max(epsilon_ending_value, epsilon_decay_value * epsilon)
-#   print('\rEpisode {}\tAverage Score: {:.2f}'.format(episode, np.mean(scores_on_100_episodes)), end = "")
-#   if episode % 100 == 0:
-#     print('\rEpisode {}\tAverage Score: {:.2f}'.format(episode, np.mean(scores_on_100_episodes)))
-#   if np.mean(scores_on_100_episodes) >= 200.0:
-#     print('\nEnvironment solved in {:d} episodes!\tAverage Score: {:.2f}'.format(episode - 100, np.mean(scores_on_100_episodes)))
-#     torch.save(agent.local_qnetwork.state_dict(), 'checkpoint.pth')
-#     break
+# Maximum number of time steps allowed inside one episode.
+# At each time step, the agent observes a state, chooses an action,
+# receives a reward, and moves to the next state.
+# If the episode ends earlier, the inner loop stops before reaching this limit.
+maximum_number_timesteps_per_episode = 1000
 
-# # Part 3 - Visualizing the results
+# Initial value of epsilon for the epsilon-greedy policy.
+# At 1.0, the agent explores completely: it chooses random actions
+# instead of relying on the Q-values predicted by the local network.
+epsilon_starting_value  = 1.0
 
-# import glob
-# import io
-# import base64
-# import imageio
-# from IPython.display import HTML, display
-# from gym.wrappers.monitoring.video_recorder import VideoRecorder
+# Minimum value epsilon is allowed to reach.
+# Even after many episodes, the agent keeps a small probability of exploration
+# instead of becoming 100% greedy.
+epsilon_ending_value  = 0.01
 
-# def show_video_of_model(agent, env_name):
-#     env = gym.make(env_name, render_mode='rgb_array')
-#     state, _ = env.reset()
-#     done = False
-#     frames = []
-#     while not done:
-#         frame = env.render()
-#         frames.append(frame)
-#         action = agent.act(state)
-#         state, reward, done, _, _ = env.step(action.item())
-#     env.close()
-#     imageio.mimsave('video.mp4', frames, fps=30)
+# Multiplicative decay applied to epsilon after each episode.
+# This gradually reduces exploration over time:
+# high exploration at the beginning, more exploitation later.
+epsilon_decay_value  = 0.995
 
-# show_video_of_model(agent, 'LunarLander-v2')
+# Current value of epsilon used by agent.act(...).
+# It starts from epsilon_starting_value and is updated after each episode.
+epsilon = epsilon_starting_value
 
-# def show_video():
-#     mp4list = glob.glob('*.mp4')
-#     if len(mp4list) > 0:
-#         mp4 = mp4list[0]
-#         video = io.open(mp4, 'r+b').read()
-#         encoded = base64.b64encode(video)
-#         display(HTML(data='''<video alt="test" autoplay
-#                 loop controls style="height: 400px;">
-#                 <source src="data:video/mp4;base64,{0}" type="video/mp4" />
-#              </video>'''.format(encoded.decode('ascii'))))
-#     else:
-#         print("Could not find video")
+# Stores the scores from the most recent 100 episodes.
+# The average of these scores is used to monitor training progress
+# and to decide when the environment is considered solved.
+scores_on_100_episodes = deque(maxlen = 100)
 
-# show_video()
+for episode in range(1, number_episodes + 1):
+  state, _ = env.reset()
+  score = 0
+  for t in range(maximum_number_timesteps_per_episode):
+    action = agent.act(state, epsilon)
+    next_state, reward, done, _, _ = env.step(action)
+    agent.step(state, action, reward, next_state, done)
+    state = next_state
+    score += reward
+    if done:
+      break
+  scores_on_100_episodes.append(score)
+  epsilon = max(epsilon_ending_value, epsilon_decay_value * epsilon)
+  print('\rEpisode {}\tAverage Score: {:.2f}'.format(episode, np.mean(scores_on_100_episodes)), end = "")
+  if episode % 100 == 0:
+    print('\rEpisode {}\tAverage Score: {:.2f}'.format(episode, np.mean(scores_on_100_episodes)))
+  if np.mean(scores_on_100_episodes) >= 200.0:
+    print('\nEnvironment solved in {:d} episodes!\tAverage Score: {:.2f}'.format(episode - 100, np.mean(scores_on_100_episodes)))
+    torch.save(agent.local_qnetwork.state_dict(), 'checkpoint.pth')
+    break
+
+# Part 3 - Visualizing the results
+
+import glob
+import io
+import base64
+import imageio
+from IPython.display import HTML, display
+from gym.wrappers.monitoring.video_recorder import VideoRecorder
+
+def show_video_of_model(agent, env_name):
+    env = gym.make(env_name, render_mode='rgb_array')
+    state, _ = env.reset()
+    done = False
+    frames = []
+    while not done:
+        frame = env.render()
+        frames.append(frame)
+        action = agent.act(state)
+        state, reward, done, _, _ = env.step(action.item())
+    env.close()
+    imageio.mimsave('video.mp4', frames, fps=30)
+
+show_video_of_model(agent, 'LunarLander-v2')
+
+def show_video():
+    mp4list = glob.glob('*.mp4')
+    if len(mp4list) > 0:
+        mp4 = mp4list[0]
+        video = io.open(mp4, 'r+b').read()
+        encoded = base64.b64encode(video)
+        display(HTML(data='''<video alt="test" autoplay
+                loop controls style="height: 400px;">
+                <source src="data:video/mp4;base64,{0}" type="video/mp4" />
+             </video>'''.format(encoded.decode('ascii'))))
+    else:
+        print("Could not find video")
+
+show_video()

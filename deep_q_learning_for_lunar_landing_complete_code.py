@@ -13,6 +13,7 @@
 
 import os
 import random
+import subprocess
 import numpy as np
 import torch
 import torch.nn as nn
@@ -361,6 +362,7 @@ class Agent():
 # # Initializing the DQN agent
 
 agent = Agent(state_size, number_actions)
+checkpoint_path = 'checkpoint.pth'
 
 # # Training the DQN agent
 
@@ -400,31 +402,44 @@ epsilon = epsilon_starting_value
 # and to decide when the environment is considered solved.
 scores_on_100_episodes = deque(maxlen = 100)
 
-for episode in range(1, number_episodes + 1):
-  state, _ = env.reset()
-  score = 0
-  for t in range(maximum_number_timesteps_per_episode):
-    action = agent.act(state, epsilon)
-    next_state, reward, terminated, truncated, _ = env.step(action)
-    done = terminated or truncated
-    agent.step(state, action, reward, next_state, done)
-    state = next_state
-    score += reward
-    if done:
+if os.path.exists(checkpoint_path):
+  agent.local_qnetwork.load_state_dict(torch.load(checkpoint_path, map_location=agent.device))
+  agent.local_qnetwork.eval()
+  print(f'Loaded trained model from {os.path.abspath(checkpoint_path)}')
+else:
+  for episode in range(1, number_episodes + 1):
+    state, _ = env.reset()
+    score = 0
+    for t in range(maximum_number_timesteps_per_episode):
+      action = agent.act(state, epsilon)
+      next_state, reward, terminated, truncated, _ = env.step(action)
+      done = terminated or truncated
+      agent.step(state, action, reward, next_state, done)
+      state = next_state
+      score += reward
+      if done:
+        break
+    scores_on_100_episodes.append(score)
+    epsilon = max(epsilon_ending_value, epsilon_decay_value * epsilon)
+    print('\rEpisode {}\tAverage Score: {:.2f}'.format(episode, np.mean(scores_on_100_episodes)), end = "")
+    if episode % 100 == 0:
+      print('\rEpisode {}\tAverage Score: {:.2f}'.format(episode, np.mean(scores_on_100_episodes)))
+    if np.mean(scores_on_100_episodes) >= 200.0:
+      print('\nEnvironment solved in {:d} episodes!\tAverage Score: {:.2f}'.format(episode - 100, np.mean(scores_on_100_episodes)))
+      torch.save(agent.local_qnetwork.state_dict(), checkpoint_path)
       break
-  scores_on_100_episodes.append(score)
-  epsilon = max(epsilon_ending_value, epsilon_decay_value * epsilon)
-  print('\rEpisode {}\tAverage Score: {:.2f}'.format(episode, np.mean(scores_on_100_episodes)), end = "")
-  if episode % 100 == 0:
-    print('\rEpisode {}\tAverage Score: {:.2f}'.format(episode, np.mean(scores_on_100_episodes)))
-  if np.mean(scores_on_100_episodes) >= 200.0:
-    print('\nEnvironment solved in {:d} episodes!\tAverage Score: {:.2f}'.format(episode - 100, np.mean(scores_on_100_episodes)))
-    torch.save(agent.local_qnetwork.state_dict(), 'checkpoint.pth')
-    break
 
 # Part 3 - Visualizing the results
 
 import imageio
+
+def open_video(video_path):
+    try:
+        subprocess.Popen(['code', video_path])
+        print('Opened video in VS Code.')
+    except FileNotFoundError:
+        os.startfile(video_path)
+        print('Opened video with the default Windows app.')
 
 def show_video_of_model(agent, env_name):
     env = gym.make(env_name, render_mode='rgb_array')
@@ -441,6 +456,6 @@ def show_video_of_model(agent, env_name):
     video_path = os.path.abspath('video.mp4')
     imageio.mimsave(video_path, frames, fps=30)
     print(f'\nVideo saved to: {video_path}')
-    os.startfile(video_path)
+    open_video(video_path)
 
 show_video_of_model(agent, 'LunarLander-v3')
